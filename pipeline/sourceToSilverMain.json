@@ -50,19 +50,24 @@
 					},
 					"activities": [
 						{
-							"name": "Set variable",
-							"type": "SetVariable",
+							"name": "callingInnerPL",
+							"type": "ExecutePipeline",
 							"dependsOn": [],
 							"policy": {
-								"secureOutput": false,
 								"secureInput": false
 							},
 							"userProperties": [],
 							"typeProperties": {
-								"variableName": "var",
-								"value": {
-									"value": "@item().table_id",
-									"type": "Expression"
+								"pipeline": {
+									"referenceName": "sourceToSilverInner",
+									"type": "PipelineReference"
+								},
+								"waitOnCompletion": true,
+								"parameters": {
+									"table_id": {
+										"value": "@item().table_id",
+										"type": "Expression"
+									}
 								}
 							}
 						}
