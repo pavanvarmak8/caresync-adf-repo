@@ -1,0 +1,66 @@
+{
+	"name": "pipeline1",
+	"properties": {
+		"activities": [
+			{
+				"name": "readWaterMark",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 2,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": {
+							"value": "SELECT watermark_value FROM ctrl.watermark WHERE table_id = 3",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "ds_azureSqlDB",
+						"type": "DatasetReference"
+					},
+					"firstRowOnly": true
+				}
+			},
+			{
+				"name": "storeWaterMarkValue",
+				"type": "SetVariable",
+				"dependsOn": [
+					{
+						"activity": "readWaterMark",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "var1",
+					"value": {
+						"value": "@activity('readWaterMark').output.firstRow.watermark_value",
+						"type": "Expression"
+					}
+				}
+			}
+		],
+		"variables": {
+			"var1": {
+				"type": "String"
+			}
+		},
+		"annotations": []
+	}
+}
