@@ -49,6 +49,81 @@
 	},
 	"resources": [
 		{
+			"name": "[concat(parameters('factoryName'), '/pipeline1')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "readWaterMark",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 2,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzureSqlSource",
+								"sqlReaderQuery": {
+									"value": "SELECT watermark_value FROM ctrl.watermark WHERE table_id = 3",
+									"type": "Expression"
+								},
+								"queryTimeout": "02:00:00",
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "ds_azureSqlDB",
+								"type": "DatasetReference",
+								"parameters": {}
+							},
+							"firstRowOnly": true
+						}
+					},
+					{
+						"name": "storeWaterMarkValue",
+						"type": "SetVariable",
+						"dependsOn": [
+							{
+								"activity": "readWaterMark",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "var1",
+							"value": {
+								"value": "@activity('readWaterMark').output.firstRow.watermark_value",
+								"type": "Expression"
+							}
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"variables": {
+					"var1": {
+						"type": "String"
+					}
+				},
+				"annotations": []
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/datasets/ds_azureSqlDB')]"
+			]
+		},
+		{
 			"name": "[concat(parameters('factoryName'), '/sourceToSilverInner')]",
 			"type": "Microsoft.DataFactory/factories/pipelines",
 			"apiVersion": "2018-06-01",
@@ -106,13 +181,7 @@
 						"type": "Copy",
 						"dependsOn": [
 							{
-								"activity": "readTableidFromMain",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							},
-							{
-								"activity": "startTime",
+								"activity": "checkLoadType",
 								"dependencyConditions": [
 									"Succeeded"
 								]
@@ -130,7 +199,7 @@
 							"source": {
 								"type": "PostgreSqlV2Source",
 								"query": {
-									"value": "SELECT * FROM PUBLIC.@{activity('readTableidFromMain').output.firstRow.source_table_name}",
+									"value": "SELECT * FROM PUBLIC.@{activity('readTableidFromMain').output.firstRow.source_table_name}\n@{\n  if(equals(activity('readTableidFromMain').output.firstRow.load_type, 'FULL')\n ,''\n ,concat(\n  'WHERE ', activity('readTableidFromMain').output.firstRow.watermark_column , ' > ', '''', variables('watermark_value') , ''''\n  )\n)\n}",
 									"type": "Expression"
 								},
 								"queryTimeout": "02:00:00"
@@ -252,6 +321,123 @@
 							"referenceName": "ls_adb",
 							"type": "LinkedServiceReference"
 						}
+					},
+					{
+						"name": "updateStatusSuccess",
+						"type": "Script",
+						"dependsOn": [
+							{
+								"activity": "bronzeToSilverNB",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 2,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"linkedServiceName": {
+							"referenceName": "ls_azureSql",
+							"type": "LinkedServiceReference"
+						},
+						"typeProperties": {
+							"scripts": [
+								{
+									"type": "Query",
+									"text": {
+										"value": "UPDATE ctrl.audit_log SET status = 'SUCCESS', records_written = @{activity('bronzeToSilverNB').output.runOutput}, end_time = SYSUTCDATETIME()\nWHERE adf_run_id = '@{pipeline().parameters.adf_run_id}'\nAND table_id = @{pipeline().parameters.table_id}",
+										"type": "Expression"
+									}
+								}
+							],
+							"scriptBlockExecutionTimeout": "02:00:00"
+						}
+					},
+					{
+						"name": "checkLoadType",
+						"type": "IfCondition",
+						"dependsOn": [
+							{
+								"activity": "readTableidFromMain",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							},
+							{
+								"activity": "startTime",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"expression": {
+								"value": "@not(equals(activity('readTableidFromMain').output.firstRow.load_type, 'FULL'))",
+								"type": "Expression"
+							},
+							"ifTrueActivities": [
+								{
+									"name": "readWaterMark",
+									"type": "Lookup",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 2,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "AzureSqlSource",
+											"sqlReaderQuery": {
+												"value": "SELECT watermark_value FROM ctrl.watermark WHERE table_id = @{pipeline().parameters.table_id}",
+												"type": "Expression"
+											},
+											"queryTimeout": "02:00:00",
+											"partitionOption": "None"
+										},
+										"dataset": {
+											"referenceName": "ds_azureSqlDB",
+											"type": "DatasetReference",
+											"parameters": {}
+										},
+										"firstRowOnly": true
+									}
+								},
+								{
+									"name": "storeWaterMarkValue",
+									"type": "SetVariable",
+									"dependsOn": [
+										{
+											"activity": "readWaterMark",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"variableName": "watermark_value",
+										"value": {
+											"value": "@activity('readTableidFromMain').output.firstRow.watermark_value",
+											"type": "Expression"
+										}
+									}
+								}
+							]
+						}
 					}
 				],
 				"policy": {
@@ -261,10 +447,16 @@
 					"table_id": {
 						"type": "string",
 						"defaultValue": "1"
+					},
+					"adf_run_id": {
+						"type": "string"
 					}
 				},
 				"variables": {
 					"start_time": {
+						"type": "String"
+					},
+					"watermark_value": {
 						"type": "String"
 					}
 				},
@@ -274,7 +466,8 @@
 				"[concat(variables('factoryId'), '/datasets/ds_azureSqlDB')]",
 				"[concat(variables('factoryId'), '/datasets/ds_postgres')]",
 				"[concat(variables('factoryId'), '/datasets/ds_adls')]",
-				"[concat(variables('factoryId'), '/linkedServices/ls_adb')]"
+				"[concat(variables('factoryId'), '/linkedServices/ls_adb')]",
+				"[concat(variables('factoryId'), '/linkedServices/ls_azureSql')]"
 			]
 		},
 		{
@@ -330,22 +523,104 @@
 								"value": "@activity('readAllActiveTables').output.value",
 								"type": "Expression"
 							},
+							"isSequential": false,
 							"activities": [
 								{
-									"name": "Set variable",
-									"type": "SetVariable",
-									"dependsOn": [],
+									"name": "callingInnerPL",
+									"type": "ExecutePipeline",
+									"dependsOn": [
+										{
+											"activity": "insertInProgressInAuditLog",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
 									"policy": {
-										"secureOutput": false,
 										"secureInput": false
 									},
 									"userProperties": [],
 									"typeProperties": {
-										"variableName": "var",
-										"value": {
-											"value": "@item().table_id",
-											"type": "Expression"
+										"pipeline": {
+											"referenceName": "sourceToSilverInner",
+											"type": "PipelineReference"
+										},
+										"waitOnCompletion": true,
+										"parameters": {
+											"table_id": {
+												"value": "@item().table_id",
+												"type": "Expression"
+											},
+											"adf_run_id": {
+												"value": "@pipeline().parameters.adf_run_id",
+												"type": "Expression"
+											}
 										}
+									}
+								},
+								{
+									"name": "insertInProgressInAuditLog",
+									"type": "Script",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 2,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"linkedServiceName": {
+										"referenceName": "ls_azureSql",
+										"type": "LinkedServiceReference"
+									},
+									"typeProperties": {
+										"scripts": [
+											{
+												"type": "Query",
+												"text": {
+													"value": "INSERT INTO ctrl.audit_log (adf_run_id, table_id, stage, status, start_time)\nVALUES ('@{pipeline().parameters.adf_run_id}', @{item().table_id}, 'SOURCE_TO_SILVER', 'IN_PROGRESS', SYSUTCDATETIME())",
+													"type": "Expression"
+												}
+											}
+										],
+										"scriptBlockExecutionTimeout": "02:00:00"
+									}
+								},
+								{
+									"name": "updateFailedStatus",
+									"type": "Script",
+									"dependsOn": [
+										{
+											"activity": "callingInnerPL",
+											"dependencyConditions": [
+												"Failed"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 2,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"linkedServiceName": {
+										"referenceName": "ls_azureSql",
+										"type": "LinkedServiceReference"
+									},
+									"typeProperties": {
+										"scripts": [
+											{
+												"type": "Query",
+												"text": {
+													"value": "UPDATE ctrl.audit_log SET status = 'FAILED', end_time = SYSUTCDATETIME() WHERE adf_run_id = '@{pipeline().parameters.adf_run_id}' AND table_id = @{item().table_id}",
+													"type": "Expression"
+												}
+											}
+										],
+										"scriptBlockExecutionTimeout": "02:00:00"
 									}
 								}
 							]
@@ -359,6 +634,10 @@
 					"source_system": {
 						"type": "string",
 						"defaultValue": "neon_postgres"
+					},
+					"adf_run_id": {
+						"type": "string",
+						"defaultValue": "a2"
 					}
 				},
 				"variables": {
@@ -369,7 +648,9 @@
 				"annotations": []
 			},
 			"dependsOn": [
-				"[concat(variables('factoryId'), '/datasets/ds_azureSqlDB')]"
+				"[concat(variables('factoryId'), '/datasets/ds_azureSqlDB')]",
+				"[concat(variables('factoryId'), '/pipelines/sourceToSilverInner')]",
+				"[concat(variables('factoryId'), '/linkedServices/ls_azureSql')]"
 			]
 		},
 		{
