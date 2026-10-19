@@ -309,7 +309,7 @@
 							"typeProperties": {
 								"variableName": "watermark_value",
 								"value": {
-									"value": "@activity('readTableidFromMain').output.firstRow.watermark_value",
+									"value": "@activity('readWaterMark').output.firstRow.watermark_value",
 									"type": "Expression"
 								}
 							}
@@ -356,7 +356,7 @@
 									{
 										"type": "Query",
 										"text": {
-											"value": "UPDATE ctrl.watermark SET water_value = SYSUTCDATETIME() WHERE table_id = @{pipeline().parameters.table_id}",
+											"value": "UPDATE ctrl.watermark SET watermark_value = SYSUTCDATETIME() WHERE table_id = @{pipeline().parameters.table_id}",
 											"type": "Expression"
 										}
 									}
@@ -370,8 +370,7 @@
 		],
 		"parameters": {
 			"table_id": {
-				"type": "string",
-				"defaultValue": "1"
+				"type": "string"
 			},
 			"adf_run_id": {
 				"type": "string"
