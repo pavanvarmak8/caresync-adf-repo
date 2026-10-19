@@ -314,6 +314,14 @@
 								"source_table_name": {
 									"value": "@activity('readTableidFromMain').output.firstRow.silver_table_name",
 									"type": "Expression"
+								},
+								"merge_keys": {
+									"value": "@coalesce(activity('readTableidFromMain').output.firstRow.merge_keys, '')",
+									"type": "Expression"
+								},
+								"load_type": {
+									"value": "@activity('readTableidFromMain').output.firstRow.load_type",
+									"type": "Expression"
 								}
 							}
 						},
@@ -431,9 +439,59 @@
 									"typeProperties": {
 										"variableName": "watermark_value",
 										"value": {
-											"value": "@activity('readTableidFromMain').output.firstRow.watermark_value",
+											"value": "@activity('readWaterMark').output.firstRow.watermark_value",
 											"type": "Expression"
 										}
+									}
+								}
+							]
+						}
+					},
+					{
+						"name": "checkingLoadTypeUpdWatarmark",
+						"type": "IfCondition",
+						"dependsOn": [
+							{
+								"activity": "bronzeToSilverNB",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"expression": {
+								"value": "@not(equals(activity('readTableidFromMain').output.firstRow.load_type, 'FULL'))",
+								"type": "Expression"
+							},
+							"ifTrueActivities": [
+								{
+									"name": "updateWatermarkValue",
+									"type": "Script",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 2,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"linkedServiceName": {
+										"referenceName": "ls_azureSql",
+										"type": "LinkedServiceReference"
+									},
+									"typeProperties": {
+										"scripts": [
+											{
+												"type": "Query",
+												"text": {
+													"value": "UPDATE ctrl.watermark SET watermark_value = SYSUTCDATETIME() WHERE table_id = @{pipeline().parameters.table_id}",
+													"type": "Expression"
+												}
+											}
+										],
+										"scriptBlockExecutionTimeout": "02:00:00"
 									}
 								}
 							]
@@ -445,8 +503,7 @@
 				},
 				"parameters": {
 					"table_id": {
-						"type": "string",
-						"defaultValue": "1"
+						"type": "string"
 					},
 					"adf_run_id": {
 						"type": "string"
