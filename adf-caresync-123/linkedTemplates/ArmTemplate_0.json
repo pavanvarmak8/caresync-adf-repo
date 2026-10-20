@@ -135,6 +135,10 @@
 				"typeProperties": {
 					"location": {
 						"type": "AzureBlobFSLocation",
+						"folderPath": {
+							"value": "@dataset().folder",
+							"type": "Expression"
+						},
 						"fileSystem": {
 							"value": "@dataset().container",
 							"type": "Expression"
@@ -925,7 +929,7 @@
 					},
 					"adf_run_id": {
 						"type": "string",
-						"defaultValue": "a2"
+						"defaultValue": "a11"
 					}
 				},
 				"variables": {
