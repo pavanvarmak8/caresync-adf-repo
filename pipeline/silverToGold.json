@@ -173,7 +173,7 @@
 									{
 										"type": "Query",
 										"text": {
-											"value": "UPDATE ctrl.audit_log SET status = 'SUCCESS', records_written = @{activity('silverToGoldNB').output.runOutput}, end_time = SYSUTCDATETIME()\nWHERE adf_run_id = '@{pipeline().parameters.adf_run_id}'\nAND table_id = item().table_id",
+											"value": "UPDATE ctrl.audit_log SET status = 'SUCCESS', records_written = @{activity('silverToGoldNB').output.runOutput}, end_time = SYSUTCDATETIME()\nWHERE adf_run_id = '@{pipeline().parameters.adf_run_id}'\nAND table_id = @{item().table_id}",
 											"type": "Expression"
 										}
 									}
