@@ -182,7 +182,7 @@
 							}
 						},
 						{
-							"name": "failInnerPipeline",
+							"name": "goldNBFailed",
 							"type": "Fail",
 							"dependsOn": [
 								{
