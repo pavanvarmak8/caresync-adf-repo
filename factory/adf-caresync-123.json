@@ -5,6 +5,10 @@
 			"env": {
 				"type": "string",
 				"value": "DEV"
+			},
+			"email_receipients": {
+				"type": "string",
+				"value": "pavanvarmak8@gmail.com"
 			}
 		}
 	},
