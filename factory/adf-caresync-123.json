@@ -1,0 +1,12 @@
+{
+	"name": "adf-caresync-123",
+	"properties": {
+		"globalParameters": {
+			"env": {
+				"type": "string",
+				"value": "DEV"
+			}
+		}
+	},
+	"location": "centralindia"
+}
