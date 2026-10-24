@@ -9,6 +9,10 @@
 			"email_receipients": {
 				"type": "string",
 				"value": "pavanvarmak8@gmail.com"
+			},
+			"logicapps_url": {
+				"type": "string",
+				"value": "https://prod-12.centralindia.logic.azure.com:443/workflows/a61f465b86144564b3e409f09ed1e3b1/triggers/When_an_HTTP_request_is_received/paths/invoke?api-version=2016-10-01&sp=%2Ftriggers%2FWhen_an_HTTP_request_is_received%2Frun&sv=1.0&sig=BEI-3IyrFEDunCqjVUXKcufbS3olxGtzb7dx406HyTc"
 			}
 		}
 	},
