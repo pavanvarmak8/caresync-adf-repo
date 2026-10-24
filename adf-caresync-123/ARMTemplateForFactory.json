@@ -49,6 +49,230 @@
 	},
 	"resources": [
 		{
+			"name": "[concat(parameters('factoryName'), '/emailPipeline')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "readAllTableStatus",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 4,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzureSqlSource",
+								"sqlReaderQuery": {
+									"value": "SELECT * FROM ctrl.audit_log WHERE adf_run_id = '@{pipeline().parameters.adf_run_id}'",
+									"type": "Expression"
+								},
+								"queryTimeout": "02:00:00",
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "ds_azureSqlDB",
+								"type": "DatasetReference",
+								"parameters": {}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "emailBodyHeader",
+						"type": "SetVariable",
+						"dependsOn": [],
+						"policy": {
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "header",
+							"value": "Data Ingestion From Source To Gold is Completed. Please find the status of the run below."
+						}
+					},
+					{
+						"name": "emailBodyFooter",
+						"type": "SetVariable",
+						"dependsOn": [],
+						"policy": {
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "footer",
+							"value": "For any queries or suggestions, please reach out to IT support team."
+						}
+					},
+					{
+						"name": "emailSubject",
+						"type": "SetVariable",
+						"dependsOn": [
+							{
+								"activity": "runStatusForSubject",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "emailSubject",
+							"value": {
+								"value": "@{pipeline().globalParameters.env} | @{if(greater(activity('runStatusForSubject').output.firstRow.count,0), 'FAILED', 'SUCCESS')} | CARESYNC MASTER RUN",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "runStatusForSubject",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzureSqlSource",
+								"sqlReaderQuery": {
+									"value": "SELECT COUNT(*) AS count FROM ctrl.audit_log WHERE adf_run_id = '@{pipeline().parameters.adf_run_id}' AND status != 'SUCCESS'",
+									"type": "Expression"
+								},
+								"queryTimeout": "02:00:00",
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "ds_azureSqlDB",
+								"type": "DatasetReference",
+								"parameters": {}
+							},
+							"firstRowOnly": true
+						}
+					},
+					{
+						"name": "logicAppsBody",
+						"type": "SetVariable",
+						"dependsOn": [
+							{
+								"activity": "readAllTableStatus",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							},
+							{
+								"activity": "emailBodyHeader",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							},
+							{
+								"activity": "emailBodyFooter",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							},
+							{
+								"activity": "emailSubject",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "email_body",
+							"value": {
+								"value": "{\n\"subject\" : \"@{variables('emailSubject')}\",\n\"email_receipients\" : \"@{pipeline().globalParameters.email_receipients}\",\n\"body_header\" : \"@{variables('header')}\",\n\"body_footer\" : \"@{variables('footer')}\",\n\"status_table\" : @{activity('readAllTableStatus').output.value}\n}",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "sendEmail",
+						"type": "WebActivity",
+						"dependsOn": [
+							{
+								"activity": "logicAppsBody",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"method": "POST",
+							"headers": {
+								"Content-Type": "application/json"
+							},
+							"url": {
+								"value": "@pipeline().globalParameters.logicapps_url",
+								"type": "Expression"
+							},
+							"body": {
+								"value": "@variables('email_body')",
+								"type": "Expression"
+							}
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"adf_run_id": {
+						"type": "string",
+						"defaultValue": "892a1cca-3afc-4b51-9947-ad5daa0eb49f"
+					}
+				},
+				"variables": {
+					"header": {
+						"type": "String"
+					},
+					"footer": {
+						"type": "String"
+					},
+					"emailSubject": {
+						"type": "String"
+					},
+					"email_body": {
+						"type": "String"
+					}
+				},
+				"annotations": []
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/datasets/ds_azureSqlDB')]"
+			]
+		},
+		{
 			"name": "[concat(parameters('factoryName'), '/masterPipeline')]",
 			"type": "Microsoft.DataFactory/factories/pipelines",
 			"apiVersion": "2018-06-01",
@@ -134,6 +358,35 @@
 								}
 							}
 						}
+					},
+					{
+						"name": "finalMailSend",
+						"type": "ExecutePipeline",
+						"dependsOn": [
+							{
+								"activity": "silverToGold",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"policy": {
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"pipeline": {
+								"referenceName": "emailPipeline",
+								"type": "PipelineReference"
+							},
+							"waitOnCompletion": true,
+							"parameters": {
+								"adf_run_id": {
+									"value": "@pipeline().RunId",
+									"type": "Expression"
+								}
+							}
+						}
 					}
 				],
 				"policy": {
@@ -143,7 +396,8 @@
 			},
 			"dependsOn": [
 				"[concat(variables('factoryId'), '/pipelines/sourceToSilverMain')]",
-				"[concat(variables('factoryId'), '/pipelines/silverToGold')]"
+				"[concat(variables('factoryId'), '/pipelines/silverToGold')]",
+				"[concat(variables('factoryId'), '/pipelines/emailPipeline')]"
 			]
 		},
 		{
@@ -330,6 +584,23 @@
 											}
 										],
 										"scriptBlockExecutionTimeout": "02:00:00"
+									}
+								},
+								{
+									"name": "goldNBFailed",
+									"type": "Fail",
+									"dependsOn": [
+										{
+											"activity": "silverToGoldNB",
+											"dependencyConditions": [
+												"Failed"
+											]
+										}
+									],
+									"userProperties": [],
+									"typeProperties": {
+										"message": "Gold Notebook Failed",
+										"errorCode": "500"
 									}
 								}
 							]
